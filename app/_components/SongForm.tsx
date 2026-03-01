@@ -213,14 +213,35 @@ export default function SongForm({
         <div className="sm:col-span-2">
           <Field label="Capa do Video Clip">
             <div className="space-y-3">
+              {/* Preview da imagem atual */}
+              {videoClipCoverUrl && (
+                <div>
+                  <p className="mb-2 text-neutral-300 text-sm">Imagem atual:</p>
+                  <Image
+                    width={320}
+                    height={180}
+                    src={videoClipCoverUrl}
+                    alt="Capa atual"
+                    className="border border-neutral-600 rounded max-w-xs object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Campo de Upload */}
               <div className="space-y-2">
+                <label className="block text-neutral-400 text-sm">
+                  {videoClipCoverUrl
+                    ? "Alterar imagem (opcional):"
+                    : "Selecionar imagem:"}
+                </label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleCoverUpload}
                   disabled={isUploadingCover}
-                  required
                   className="text-neutral-300 text-sm"
                 />
 
@@ -232,23 +253,6 @@ export default function SongForm({
                   <p className="text-red-400 text-sm">{uploadError}</p>
                 )}
               </div>
-
-              {/* Preview da imagem */}
-              {videoClipCoverUrl && (
-                <div className="mt-3">
-                  <p className="mb-2 text-neutral-300 text-sm">Preview:</p>
-                  <Image
-                    width={1280}
-                    height={720}
-                    src={videoClipCoverUrl}
-                    alt="Preview da capa"
-                    className="border border-neutral-600 rounded max-w-xs object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
-                </div>
-              )}
             </div>
           </Field>
         </div>
