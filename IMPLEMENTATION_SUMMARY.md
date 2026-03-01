@@ -8,6 +8,32 @@ Sistema completo de sincronização automática de letras usando GCP Speech-to-T
 
 ---
 
+## ⚠️ TROUBLESHOOTING - Leia PRIMEIRO
+
+### Problema: "No transcription results returned"
+
+**Causa**: A API do GCP processou o áudio mas não conseguiu detectar vocais/fala.
+
+**Razões comuns**:
+1. 🎵 **Áudio instrumental** - Música sem vocais ou vocais muito baixos
+2. 🔊 **Música muito alta** - Vocais estão misturados com instrumentos
+3. 🎤 **Qualidade ruim** - Áudio com muito ruído ou compressão excessiva
+4. 🗣️ **Idioma errado** - Sistema está configurado para japonês
+
+**Soluções**:
+- ✅ Use áudio com **vocais claros e destacados**
+- ✅ Considere usar ferramentas de separação de áudio (ex: Spleeter, UVR5)
+- ✅ Teste com um trecho curto primeiro (30-60 segundos)
+- ✅ Verifique se o áudio é realmente em japonês
+- ✅ Garanta que o arquivo toca corretamente antes de fazer upload
+
+**Exemplo de áudio ideal**:
+- Versão acapella ou com vocais isolados
+- Gravação ao vivo com boa captura de voz
+- Versão studio com mix que favorece os vocais
+
+---
+
 ## 🎯 Tarefas Completadas (6/9 - 100% das prioritárias)
 
 ### ✅ TASK-001: Configurar GCP Speech-to-Text API
