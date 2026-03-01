@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveLyrics, createLyricsVersion, Lyrics, LyricsLine } from "../actions/lyrics";
+import { saveLyrics, createLyricsVersion, deleteLyricsVersion, importLyricsFromText, Lyrics, LyricsLine } from "../actions/lyrics";
 import { translateLyrics } from "../actions/translate";
+import LyricsImportModal from "./LyricsImportModal";
 
 interface Language {
   id: string;
@@ -24,6 +25,9 @@ export default function LyricsEditor({ songId, lyrics: initialLyrics, languages 
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, startImportTransition] = useTransition();
+  const [isDeleting, startDeleteTransition] = useTransition();
 
   const currentLyrics = lyricsArray[selectedLyricsIndex];
 
@@ -35,6 +39,40 @@ export default function LyricsEditor({ songId, lyrics: initialLyrics, languages 
     ]);
     setSelectedLyricsIndex(lyricsArray.length);
     setSelectedLineIndex(null);
+  };
+
+  const handleRemoveVersion = () => {
+    if (lyricsArray.length <= 1) {
+      setError("Não é possível remover a última versão de letras.");
+      return;
+    }
+    
+    const currentLyricsId = currentLyrics?.id;
+    if (!currentLyricsId) return;
+    
+    if (!confirm("Tem certeza que deseja remover esta versão? Esta ação não pode ser desfeita.")) {
+      return;
+    }
+    
+    setError(null);
+    setSaveSuccess(false);
+    startDeleteTransition(async () => {
+      try {
+        await deleteLyricsVersion(currentLyricsId);
+        const newLyricsArray = lyricsArray.filter((_, i) => i !== selectedLyricsIndex);
+        setLyricsArray(newLyricsArray);
+        
+        // Adjust selected index if necessary
+        const newIndex = selectedLyricsIndex >= newLyricsArray.length 
+          ? Math.max(0, newLyricsArray.length - 1) 
+          : selectedLyricsIndex;
+        setSelectedLyricsIndex(newIndex);
+        setSelectedLineIndex(null);
+        setSaveSuccess(true);
+      } catch (err) {
+        setError(String(err));
+      }
+    });
   };
 
   const handleAddLine = () => {
@@ -174,6 +212,23 @@ export default function LyricsEditor({ songId, lyrics: initialLyrics, languages 
     });
   };
 
+  const handleImportLyrics = (text: string) => {
+    setError(null);
+    setSaveSuccess(false);
+    startImportTransition(async () => {
+      try {
+        const newLyrics = await importLyricsFromText(songId, text);
+        setLyricsArray([...lyricsArray, newLyrics]);
+        setSelectedLyricsIndex(lyricsArray.length);
+        setSelectedLineIndex(null);
+        setShowImportModal(false);
+        setSaveSuccess(true);
+      } catch (err) {
+        setError(String(err));
+      }
+    });
+  };
+
   if (lyricsArray.length === 0) {
     return (
       <div className="text-center py-12">
@@ -231,6 +286,15 @@ export default function LyricsEditor({ songId, lyrics: initialLyrics, languages 
         >
           + Nova Versão
         </button>
+        {lyricsArray.length > 1 && (
+          <button
+            onClick={handleRemoveVersion}
+            disabled={isDeleting}
+            className="mt-auto text-sm text-red-400 hover:text-red-300 border border-red-600 rounded px-3 py-2 hover:border-red-400 disabled:opacity-50"
+          >
+            {isDeleting ? "Removendo..." : "Remover Versão"}
+          </button>
+        )}
       </div>
 
       {/* Language selector */}
@@ -361,6 +425,13 @@ export default function LyricsEditor({ songId, lyrics: initialLyrics, languages 
           Adicionar Linha
         </button>
         <button
+          onClick={() => setShowImportModal(true)}
+          type="button"
+          className="bg-blue-600 hover:bg-blue-700 text-white rounded px-4 py-2 text-sm"
+        >
+          Importar Letras
+        </button>
+        <button
           onClick={handleSave}
           disabled={isSaving}
           type="button"
@@ -369,6 +440,13 @@ export default function LyricsEditor({ songId, lyrics: initialLyrics, languages 
           {isSaving ? "Salvando..." : "Salvar"}
         </button>
       </div>
+      
+      <LyricsImportModal 
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportLyrics}
+        isLoading={isImporting}
+      />
     </div>
   );
 }

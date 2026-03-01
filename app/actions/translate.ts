@@ -1,6 +1,7 @@
 "use server";
 
 import { v3 } from "@google-cloud/translate";
+import { getGCPCredentials } from "../_utils/gcp";
 
 export async function translateLyrics(
   lines: string[],
@@ -15,7 +16,7 @@ export async function translateLyrics(
   }
 
   try {
-    const client = new v3.TranslationServiceClient();
+    const client = new v3.TranslationServiceClient(getGCPCredentials());
     const parent = client.locationPath(projectId, "global");
 
     const [[translateResponse], [romanizeResponse]] = await Promise.all([

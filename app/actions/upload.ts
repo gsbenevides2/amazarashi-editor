@@ -1,6 +1,7 @@
 "use server";
 
 import { Storage } from "@google-cloud/storage";
+import { getGCPCredentials } from "../_utils/gcp";
 
 export async function uploadImage(
   formData: FormData,
@@ -17,7 +18,7 @@ export async function uploadImage(
   }
 
   try {
-    const storage = new Storage();
+    const storage = new Storage(getGCPCredentials());
 
     const ext = file.name.split(".").pop() ?? "jpg";
     const fileName = `amazarashi/${crypto.randomUUID()}.${ext}`;
