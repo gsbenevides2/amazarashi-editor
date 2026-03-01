@@ -2,8 +2,8 @@
 
 import { useState, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createAlbum, updateAlbum, setAlbumSongs } from "../actions/albums";
-import { uploadImage } from "../actions/upload";
+import { createAlbum, updateAlbum, setAlbumSongs } from "../_actions/albums";
+import { uploadImage } from "../_actions/upload";
 import Image from "next/image";
 
 type Song = { id: string; nameRomaji: string; nameHiragana: string };

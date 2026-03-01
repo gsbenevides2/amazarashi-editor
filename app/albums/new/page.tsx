@@ -1,6 +1,8 @@
 import Link from "next/link";
 import AlbumForm from "../../_components/AlbumForm";
-import { getSongs } from "../../actions/songs";
+import { getSongs } from "../../_actions/songs";
+
+export const dynamic = "force-dynamic";
 
 export default async function NewAlbumPage() {
   const songs = await getSongs();

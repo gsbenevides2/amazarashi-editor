@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useTransition } from "react";
-import { saveLyrics, Lyrics } from "../actions/lyrics";
-import { synchronizeAudioWithExistingLyrics } from "../actions/speech-to-text";
+import { saveLyrics, Lyrics } from "../_actions/lyrics";
+import { synchronizeAudioWithExistingLyrics } from "../_actions/speech-to-text";
 
 declare global {
   interface Window {

@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { getAlbums } from "../actions/albums";
+import { getAlbums } from "../_actions/albums";
 import Image from "next/image";
+
+export const dynamic = "force-dynamic";
 
 export default async function AlbumsPage() {
   const albums = await getAlbums();

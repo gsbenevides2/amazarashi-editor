@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import SongForm from "../../_components/SongForm";
-import { getSong } from "../../actions/songs";
+import { getSong } from "../../_actions/songs";
 
 type Props = { params: Promise<{ songId: string }> };
+
+export const dynamic = "force-dynamic";
 
 export default async function EditSongPage({ params }: Props) {
   const { songId } = await params;

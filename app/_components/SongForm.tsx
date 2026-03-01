@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { updateSong } from "../actions/songs";
-import { uploadImage } from "../actions/upload";
+import { updateSong } from "../_actions/songs";
+import { uploadImage } from "../_actions/upload";
 import Image from "next/image";
 
 type SongFormProps = {

@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import AlbumForm from "../../_components/AlbumForm";
-import { getAlbum } from "../../actions/albums";
-import { getSongs } from "../../actions/songs";
+import { getAlbum } from "../../_actions/albums";
+import { getSongs } from "../../_actions/songs";
 
 type Props = { params: Promise<{ albumId: string }> };
+
+export const dynamic = "force-dynamic";
 
 export default async function EditAlbumPage({ params }: Props) {
   const { albumId } = await params;

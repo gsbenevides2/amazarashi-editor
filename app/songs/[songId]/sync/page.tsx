@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getSong } from "../../../actions/songs";
-import { getLyrics, getLanguages } from "../../../actions/lyrics";
+import { getSong } from "../../../_actions/songs";
+import { getLyrics, getLanguages } from "../../../_actions/lyrics";
 import LyricsSynchronization from "../../../_components/LyricsSynchronization";
 
 type Props = { params: Promise<{ songId: string }> };
+
+export const dynamic = "force-dynamic";
 
 export default async function SyncPage({ params }: Props) {
   const { songId } = await params;

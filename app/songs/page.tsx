@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { getSongs } from "../actions/songs";
+import { getSongs } from "../_actions/songs";
+
+export const dynamic = "force-dynamic";
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -26,7 +28,8 @@ export default async function SongsPage() {
               <div className="flex-1 min-w-0">
                 <p className="font-semibold">{song.nameRomaji}</p>
                 <p className="text-neutral-400 text-sm">
-                  {song.namePortuguese} · {formatDuration(song.duration)} · {song.releaseDate}
+                  {song.namePortuguese} · {formatDuration(song.duration)} ·{" "}
+                  {song.releaseDate}
                 </p>
                 {song.albums.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
