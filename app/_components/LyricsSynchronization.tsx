@@ -329,10 +329,19 @@ export default function LyricsSynchronization({
       {/* Auto-sync section */}
       <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-5">
         <h3 className="text-lg font-semibold text-white mb-4">
-          🤖 Sincronização Automática
+          🤖 Sincronização Automática com IA
         </h3>
+        <div className="bg-blue-900/20 border border-blue-700 rounded px-3 py-2 mb-4 text-sm text-blue-200">
+          <strong>ℹ️ Requisitos:</strong>
+          <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
+            <li>Áudio em japonês com vocais claros</li>
+            <li>Qualidade de áudio boa (sem muito ruído)</li>
+            <li>Formatos: MP3, WAV, FLAC, M4A, OGG</li>
+            <li>Tamanho máximo: 500MB</li>
+          </ul>
+        </div>
         <p className="text-neutral-400 text-sm mb-4">
-          Faça upload de um arquivo de áudio para sincronizar automaticamente as letras usando AI.
+          Faça upload de um arquivo de áudio para sincronizar automaticamente as letras usando AI (GCP Speech-to-Text).
         </p>
         
         <div className="space-y-4">
@@ -400,7 +409,26 @@ export default function LyricsSynchronization({
                   </span>
                 </>
               ) : (
-                `❌ Erro: ${autoSyncResult.error}`
+                <>
+                  <div className="font-semibold">❌ Erro: {autoSyncResult.error}</div>
+                  {autoSyncResult.error.includes('No transcription results') && (
+                    <div className="mt-2 text-xs space-y-1">
+                      <div className="font-semibold">💡 Possíveis causas:</div>
+                      <ul className="list-disc list-inside ml-2 space-y-0.5">
+                        <li>Áudio é instrumental (sem vocais claros)</li>
+                        <li>Vocais muito baixos ou misturados com música</li>
+                        <li>Qualidade do áudio ruim</li>
+                        <li>Idioma não é japonês</li>
+                      </ul>
+                      <div className="mt-2 font-semibold">🔧 Sugestões:</div>
+                      <ul className="list-disc list-inside ml-2 space-y-0.5">
+                        <li>Use um áudio com vocais mais claros</li>
+                        <li>Tente remover música de fundo com ferramentas de separação de áudio</li>
+                        <li>Verifique se o áudio está em japonês</li>
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

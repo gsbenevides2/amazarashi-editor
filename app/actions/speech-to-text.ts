@@ -27,18 +27,21 @@ export async function processAudioWithSpeechToText(
     console.log('🎙️ Processing audio with Speech-to-Text:', audioUri);
 
     // Configure request for Japanese audio with word timestamps
+    // Note: For MP3 files, don't specify encoding - let GCP auto-detect
     const config = {
-      // Let GCP auto-detect encoding for better compatibility
-      encoding: 'MP3' as const, // Most common format
       languageCode: 'ja-JP',
+      // Try multiple language codes for better detection
+      alternativeLanguageCodes: ['en-US'], // Fallback if some words are in English
       model: 'latest_long', // Best for music/long audio
       enableWordTimeOffsets: true,
       enableAutomaticPunctuation: true,
-      useEnhanced: true, // Better accuracy for complex audio
+      audioChannelCount: 2, // Stereo audio
+      enableSeparateRecognitionPerChannel: false, // Merge channels
       maxAlternatives: 1,
     };
 
     console.log('📡 Sending request to Speech-to-Text API (LongRunningRecognize)...');
+    console.log('   Config:', JSON.stringify(config, null, 2));
     
     // Use longRunningRecognize for any audio file (safer than checking duration)
     const [operation] = await speechClient.longRunningRecognize({
@@ -47,12 +50,23 @@ export async function processAudioWithSpeechToText(
     });
 
     console.log('⏳ Waiting for long-running operation to complete...');
+    console.log('   Operation name:', operation.name);
     const [response] = await operation.promise();
+    
+    console.log('✅ Operation completed');
+    console.log('   Response results:', response.results?.length || 0);
 
     if (!response.results || response.results.length === 0) {
+      console.warn('⚠️ No transcription results returned');
+      console.warn('   This may happen if:');
+      console.warn('   - Audio has no clear speech/vocals');
+      console.warn('   - Audio quality is too low');
+      console.warn('   - Language detection failed');
+      console.warn('   - Audio format is incompatible');
+      
       return {
         success: false,
-        error: 'No transcription results returned from Speech-to-Text API',
+        error: 'No transcription results returned from Speech-to-Text API. The audio may not contain clear vocals or the language may not match the configured settings (Japanese).',
       };
     }
 
@@ -62,11 +76,18 @@ export async function processAudioWithSpeechToText(
 
     for (const result of response.results) {
       const alternative = result.alternatives?.[0];
-      if (!alternative) continue;
+      if (!alternative) {
+        console.warn('⚠️ Result has no alternatives');
+        continue;
+      }
 
-      fullTranscript += alternative.transcript || '';
+      const transcript = alternative.transcript || '';
+      fullTranscript += transcript;
+      
+      console.log(`📝 Transcript chunk: "${transcript.substring(0, 50)}${transcript.length > 50 ? '...' : ''}"`);
 
       if (alternative.words) {
+        console.log(`   Words in chunk: ${alternative.words.length}`);
         for (const wordInfo of alternative.words) {
           // Parse time structure ({seconds: string, nanos: number})
           const startSeconds = parseTimeObject(wordInfo.startTime);
@@ -81,11 +102,22 @@ export async function processAudioWithSpeechToText(
             });
           }
         }
+      } else {
+        console.warn('⚠️ Alternative has no words array');
       }
+    }
+    
+    if (words.length === 0) {
+      console.warn('⚠️ No words extracted from results');
+      return {
+        success: false,
+        error: 'Speech-to-Text returned results but no words were extracted. The audio may have unclear vocals or background music is too loud.',
+      };
     }
 
     console.log('✅ Speech-to-Text processing complete');
     console.log(`📊 Results: ${words.length} words, ${fullTranscript.length} chars transcript`);
+    console.log(`📝 Sample transcript: "${fullTranscript.substring(0, 100)}${fullTranscript.length > 100 ? '...' : ''}"`);
 
     return {
       success: true,
