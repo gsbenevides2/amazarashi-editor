@@ -14,7 +14,15 @@ export default async function SongsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-6 font-bold text-2xl">Músicas</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="font-bold text-2xl">Músicas</h1>
+        <Link
+          href="/songs/new"
+          className="bg-white hover:bg-neutral-200 px-4 py-2 rounded font-semibold text-black"
+        >
+          Adicionar Nova Música
+        </Link>
+      </div>
 
       {songs.length === 0 ? (
         <p className="text-neutral-400">Nenhuma música cadastrada.</p>

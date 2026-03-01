@@ -68,6 +68,17 @@ export async function getSong(id: string) {
   };
 }
 
+export async function createSong(data: SongInput) {
+  const db = connectToDatabase();
+  const id = crypto.randomUUID();
+  await db.insert(musicsTable).values({
+    id,
+    ...data,
+  });
+  invalidateISG();
+  return id;
+}
+
 export async function updateSong(id: string, data: Partial<SongInput>) {
   const db = connectToDatabase();
   await db.update(musicsTable).set(data).where(eq(musicsTable.id, id));
