@@ -11,6 +11,7 @@ import fs from "fs";
 import { connectToDatabase } from "@/db";
 import { eq } from "drizzle-orm";
 import { lyrics_lines } from "@/db/schema";
+import { invalidateISG } from "../_utils/invalidateISG";
 
 interface SpeechToTextResult {
   word: string;
@@ -351,6 +352,7 @@ export async function synchronizeAudioWithExistingLyrics(
     }
 
     await updateStartAndEndInDatabaseFromAiResponse(lyrics, aiResult.response);
+    invalidateISG();
     return {
       success: true,
     };

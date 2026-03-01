@@ -3,6 +3,7 @@
 import { connectToDatabase } from "@/db";
 import { musicsTable, musics_albumsTable, albunsTable } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
+import { invalidateISG } from "../_utils/invalidateISG";
 
 export type SongInput = {
   nameRomaji: string;
@@ -37,7 +38,7 @@ export async function getSongs() {
           .filter((a) => a.id !== null)
           .map((a) => ({ id: a.id!, nameRomaji: a.nameRomaji! })),
       };
-    })
+    }),
   );
 
   return withAlbums;
@@ -70,4 +71,5 @@ export async function getSong(id: string) {
 export async function updateSong(id: string, data: Partial<SongInput>) {
   const db = connectToDatabase();
   await db.update(musicsTable).set(data).where(eq(musicsTable.id, id));
+  invalidateISG();
 }

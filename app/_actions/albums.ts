@@ -3,6 +3,7 @@
 import { connectToDatabase } from "@/db";
 import { albunsTable, musics_albumsTable, musicsTable } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
+import { invalidateISG } from "../_utils/invalidateISG";
 
 export type AlbumInput = {
   nameRomaji: string;
@@ -43,7 +44,12 @@ export async function getAlbum(id: string) {
     ...album,
     songs: songs
       .filter((s) => s.id !== null)
-      .map((s) => ({ id: s.id!, nameRomaji: s.nameRomaji!, nameHiragana: s.nameHiragana!, position: s.position })),
+      .map((s) => ({
+        id: s.id!,
+        nameRomaji: s.nameRomaji!,
+        nameHiragana: s.nameHiragana!,
+        position: s.position,
+      })),
   };
 }
 
@@ -51,12 +57,14 @@ export async function createAlbum(data: AlbumInput) {
   const db = connectToDatabase();
   const id = crypto.randomUUID();
   await db.insert(albunsTable).values({ id, ...data });
+  invalidateISG();
   return id;
 }
 
 export async function updateAlbum(id: string, data: Partial<AlbumInput>) {
   const db = connectToDatabase();
   await db.update(albunsTable).set(data).where(eq(albunsTable.id, id));
+  invalidateISG();
 }
 
 export async function addSongToAlbum(albumId: string, songId: string) {
@@ -66,7 +74,10 @@ export async function addSongToAlbum(albumId: string, songId: string) {
     .from(musics_albumsTable)
     .where(eq(musics_albumsTable.albumId, albumId));
   const position = existing.length + 1;
-  await db.insert(musics_albumsTable).values({ albumId, musicId: songId, position });
+  await db
+    .insert(musics_albumsTable)
+    .values({ albumId, musicId: songId, position });
+  invalidateISG();
 }
 
 export async function removeSongFromAlbum(albumId: string, songId: string) {
@@ -78,20 +89,28 @@ export async function removeSongFromAlbum(albumId: string, songId: string) {
     .orderBy(asc(musics_albumsTable.position));
 
   const filtered = allForAlbum.filter((r) => r.musicId !== songId);
-  await db.delete(musics_albumsTable).where(eq(musics_albumsTable.albumId, albumId));
+  await db
+    .delete(musics_albumsTable)
+    .where(eq(musics_albumsTable.albumId, albumId));
   if (filtered.length > 0) {
-    await db.insert(musics_albumsTable).values(
-      filtered.map((r, i) => ({ ...r, position: i + 1 }))
-    );
+    await db
+      .insert(musics_albumsTable)
+      .values(filtered.map((r, i) => ({ ...r, position: i + 1 })));
   }
+  invalidateISG();
 }
 
 export async function setAlbumSongs(albumId: string, songIds: string[]) {
   const db = connectToDatabase();
-  await db.delete(musics_albumsTable).where(eq(musics_albumsTable.albumId, albumId));
+  await db
+    .delete(musics_albumsTable)
+    .where(eq(musics_albumsTable.albumId, albumId));
   if (songIds.length > 0) {
-    await db.insert(musics_albumsTable).values(
-      songIds.map((musicId, i) => ({ albumId, musicId, position: i + 1 }))
-    );
+    await db
+      .insert(musics_albumsTable)
+      .values(
+        songIds.map((musicId, i) => ({ albumId, musicId, position: i + 1 })),
+      );
   }
+  invalidateISG();
 }
