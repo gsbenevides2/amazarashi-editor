@@ -27,25 +27,27 @@ export async function processAudioWithSpeechToText(
     console.log('🎙️ Processing audio with Speech-to-Text:', audioUri);
 
     // Configure request for Japanese audio with word timestamps
-    const request = {
-      config: {
-        // Let GCP auto-detect encoding for better compatibility
-        encoding: 'FLAC' as const,
-        sampleRateHertz: 16000, // Explicit sample rate for FLAC
-        languageCode: 'ja-JP',
-        model: 'latest_long', // Best for music/long audio
-        enableWordTimeOffsets: true,
-        enableAutomaticPunctuation: true,
-        useEnhanced: true, // Better accuracy for complex audio
-        maxAlternatives: 1,
-      },
-      audio: {
-        uri: audioUri,
-      },
+    const config = {
+      // Let GCP auto-detect encoding for better compatibility
+      encoding: 'MP3' as const, // Most common format
+      languageCode: 'ja-JP',
+      model: 'latest_long', // Best for music/long audio
+      enableWordTimeOffsets: true,
+      enableAutomaticPunctuation: true,
+      useEnhanced: true, // Better accuracy for complex audio
+      maxAlternatives: 1,
     };
 
-    console.log('📡 Sending request to Speech-to-Text API...');
-    const [response] = await speechClient.recognize(request);
+    console.log('📡 Sending request to Speech-to-Text API (LongRunningRecognize)...');
+    
+    // Use longRunningRecognize for any audio file (safer than checking duration)
+    const [operation] = await speechClient.longRunningRecognize({
+      config,
+      audio: { uri: audioUri },
+    });
+
+    console.log('⏳ Waiting for long-running operation to complete...');
+    const [response] = await operation.promise();
 
     if (!response.results || response.results.length === 0) {
       return {
@@ -144,29 +146,14 @@ function parseDuration(duration: string | undefined): number | null {
 }
 
 /**
- * Process longer audio files using BatchRecognize (for files > 60 seconds)
- * This is asynchronous and requires polling for completion
+ * Process longer audio files using LongRunningRecognize
+ * This is now the same as processAudioWithSpeechToText since we always use longRunningRecognize
+ * Kept for backward compatibility
  */
 export async function processLongAudioWithSpeechToText(
   audioUri: string
 ): Promise<SpeechToTextResult> {
-  try {
-    console.log('🎙️ Processing long audio with BatchRecognize:', audioUri);
-
-    // For batch recognition, we need to use the v2 API (if available)
-    // For now, let's use the regular recognize method with longer timeout
-    // In production, you might want to implement proper BatchRecognize
-    
-    return processAudioWithSpeechToText(audioUri);
-    
-  } catch (error) {
-    console.error('❌ Long audio processing error:', error);
-    
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error during long audio processing',
-    };
-  }
+  return processAudioWithSpeechToText(audioUri);
 }
 
 interface AlignmentResult {
