@@ -11,6 +11,15 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  /*
+  logging: {
+    fetches: {
+      fullUrl: false,
+      hmrRefreshes: false,
+    },
+    incomingRequests: false,
+  },
+  */
   experimental: {
     serverActions: {
       bodySizeLimit: "100mb",

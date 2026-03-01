@@ -76,3 +76,9 @@ export const lyrics_lines_texts = sqliteTable("lyrics_lines_texts", {
     .notNull(),
   text: text("text").notNull(),
 });
+
+export const sessionsTable = sqliteTable("session", {
+  sessionToken: text("sessionToken").primaryKey().notNull(),
+  expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
+  logged: integer("logged", { mode: "boolean" }).notNull().default(false),
+});
