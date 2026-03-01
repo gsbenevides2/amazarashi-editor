@@ -81,6 +81,12 @@ export default function LyricsSynchronization({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Auto-sync states
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+  const [autoSyncProgress, setAutoSyncProgress] = useState<string>('');
+  const [autoSyncResult, setAutoSyncResult] = useState<any>(null);
+
   const playerRef = useRef<YTPlayer | null>(null);
   const previewIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -102,6 +108,91 @@ export default function LyricsSynchronization({
     },
     [selectedLanguage]
   );
+
+  // Auto-sync handlers
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAudioFile(file);
+      setAutoSyncResult(null);
+    }
+  };
+
+  const handleAutoSync = async () => {
+    if (!audioFile || !currentLyrics) return;
+
+    setIsAutoSyncing(true);
+    setAutoSyncResult(null);
+    
+    try {
+      setAutoSyncProgress('Uploading and processing audio with AI...');
+      
+      const formData = new FormData();
+      formData.append('audio', audioFile);
+      formData.append('languageId', selectedLanguage);
+      
+      const response = await fetch(`/api/songs/${currentLyrics.musicId}/auto-sync`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Auto-sync failed');
+      }
+      
+      setAutoSyncResult(result);
+      
+      if (result.success && result.alignedLines) {
+        setAutoSyncProgress('Synchronization completed! Timestamps have been saved.');
+        
+        // Update the lyrics array with new timestamps
+        const updatedLyricsArray = [...lyricsArray];
+        const updatedLyrics = { ...currentLyrics };
+        const updatedLines = [...updatedLyrics.lines];
+        
+        // Apply the aligned timestamps
+        result.alignedLines.forEach((alignedLine: any) => {
+          const lineIndex = updatedLines.findIndex(line => line.id === alignedLine.lineId);
+          if (lineIndex >= 0) {
+            updatedLines[lineIndex] = {
+              ...updatedLines[lineIndex],
+              start: formatTime(alignedLine.startTime),
+              end: formatTime(alignedLine.endTime)
+            };
+          }
+        });
+        
+        updatedLyrics.lines = updatedLines;
+        updatedLyricsArray[selectedLyricsIndex] = updatedLyrics;
+        setLyricsArray(updatedLyricsArray);
+        
+        // Show success message with stats
+        if (result.stats) {
+          setAutoSyncProgress(
+            `✅ ${result.stats.alignedLines} de ${result.stats.totalLines} linhas sincronizadas! ` +
+            `Confiança média: ${(result.stats.averageConfidence * 100).toFixed(1)}%`
+          );
+        }
+      }
+      
+    } catch (error) {
+      console.error('Auto-sync error:', error);
+      setAutoSyncResult({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      });
+    } finally {
+      setIsAutoSyncing(false);
+    }
+  };
+
+  const formatTimeForDisplay = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toFixed(1).padStart(4, '0')}`;
+  };
 
   // Initialize YouTube player
   useEffect(() => {
@@ -234,6 +325,87 @@ export default function LyricsSynchronization({
           Sincronização salva com sucesso!
         </div>
       )}
+
+      {/* Auto-sync section */}
+      <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-5">
+        <h3 className="text-lg font-semibold text-white mb-4">
+          🤖 Sincronização Automática
+        </h3>
+        <p className="text-neutral-400 text-sm mb-4">
+          Faça upload de um arquivo de áudio para sincronizar automaticamente as letras usando AI.
+        </p>
+        
+        <div className="space-y-4">
+          <div>
+            <input
+              type="file"
+              accept="audio/*,.flac,.wav,.mp3,.m4a,.aac"
+              onChange={handleFileSelect}
+              className="block w-full text-sm text-neutral-400
+                file:mr-4 file:py-2 file:px-4
+                file:rounded file:border-0
+                file:text-sm file:font-semibold
+                file:bg-blue-600 file:text-white
+                hover:file:bg-blue-700
+                file:cursor-pointer cursor-pointer"
+              disabled={isAutoSyncing}
+            />
+            
+            {audioFile && (
+              <p className="mt-2 text-xs text-neutral-500">
+                Arquivo: {audioFile.name} ({(audioFile.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleAutoSync}
+              disabled={!audioFile || isAutoSyncing || !currentLyrics}
+              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:bg-neutral-600 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isAutoSyncing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Processando...
+                </>
+              ) : (
+                '🎯 Sincronizar Automaticamente'
+              )}
+            </button>
+          </div>
+
+          {autoSyncProgress && (
+            <div className="bg-blue-900/30 border border-blue-700 text-blue-200 px-3 py-2 rounded text-sm">
+              {autoSyncProgress}
+            </div>
+          )}
+
+          {autoSyncResult && (
+            <div className={`px-3 py-2 rounded text-sm ${
+              autoSyncResult.success 
+                ? 'bg-green-900/30 border border-green-700 text-green-200'
+                : 'bg-red-900/30 border border-red-700 text-red-200'
+            }`}>
+              {autoSyncResult.success ? (
+                <>
+                  ✅ {autoSyncResult.stats?.alignedLines || 0} de {autoSyncResult.stats?.totalLines || 0} linhas sincronizadas!
+                  {autoSyncResult.stats && (
+                    <span className="block text-xs opacity-80 mt-1">
+                      Confiança média: {(autoSyncResult.stats.averageConfidence * 100).toFixed(1)}%
+                    </span>
+                  )}
+                  <span className="block text-xs opacity-80 mt-1">
+                    Os timestamps foram salvos automaticamente no banco de dados.
+                  </span>
+                </>
+              ) : (
+                `❌ Erro: ${autoSyncResult.error}`
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Controls row */}
       <div className="flex flex-wrap items-center gap-3">
