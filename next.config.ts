@@ -11,17 +11,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  /*
-  logging: {
-    fetches: {
-      fullUrl: false,
-      hmrRefreshes: false,
-    },
-    incomingRequests: false,
-  },
-  */
   experimental: {
     serverActions: {
+      allowedOrigins: ["*.gui.dev.br"],
       bodySizeLimit: "100mb",
     },
   },
