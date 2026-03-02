@@ -10,6 +10,10 @@ export function getOauthClient(redirectUri: string) {
 }
 
 export function getRedirectUri(req: Request) {
+  const reverseProxyHost = process.env.REVERSE_PROXY_HOST;
+  if (reverseProxyHost) {
+    return `${reverseProxyHost}/api/auth/google`;
+  }
   const url = new URL(req.url);
   url.pathname = "/api/auth/google";
   url.search = ""; // Clear any existing query parameters
