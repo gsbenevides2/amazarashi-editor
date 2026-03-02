@@ -77,6 +77,12 @@ export const lyrics_lines_texts = sqliteTable("lyrics_lines_texts", {
   text: text("text").notNull(),
 });
 
+export const ai_sync_status = sqliteTable("ai_sync_status", {
+  id: text("id").primaryKey(),
+  running: integer("running", { mode: "boolean" }).notNull().default(true),
+  error: text("error"),
+});
+
 export const sessionsTable = sqliteTable("session", {
   sessionToken: text("sessionToken").primaryKey().notNull(),
   expires: integer("expires", { mode: "timestamp_ms" }).notNull(),

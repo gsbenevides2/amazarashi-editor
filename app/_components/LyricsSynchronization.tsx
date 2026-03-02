@@ -6,6 +6,7 @@ import { saveLyrics, Lyrics } from "../_actions/lyrics";
 import {
   synchronizeAudioWithExistingLyrics,
   getPreSignedUrlForAudioUpload,
+  getProcessIdStatus,
 } from "../_actions/speech-to-text";
 import { uploadFileDirectly } from "../_utils/upload";
 
@@ -155,9 +156,18 @@ export default function LyricsSynchronization({
           currentLyrics.musicId,
         );
       })
-      .then((result) => {
+      .then(async (result) => {
         if (result.success) {
-          setAutoSyncState("success");
+          while (true) {
+            await new Promise((res) => setTimeout(res, 2000)); // Poll every 2 seconds
+            const statusResult = await getProcessIdStatus(result.processId);
+            if ("error" in statusResult) {
+              throw new Error(statusResult.error);
+            } else if (statusResult.running === false) {
+              setAutoSyncState("success");
+              break;
+            }
+          }
         } else {
           setAutoSyncState("error");
           setAutoSyncErrorMessage(result.error || "Unknown error");

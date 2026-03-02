@@ -10,8 +10,9 @@ import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 import fs from "fs";
 import { connectToDatabase } from "@/db";
 import { eq } from "drizzle-orm";
-import { lyrics_lines } from "@/db/schema";
+import { ai_sync_status, lyrics_lines } from "@/db/schema";
 import { invalidateISG } from "../_utils/invalidateISG";
+import { after } from "next/server";
 
 interface SpeechToTextResult {
   word: string;
@@ -314,47 +315,122 @@ function updateStartAndEndInDatabaseFromAiResponse(
     });
 }
 
+function createProcessOnDatabase(processId: string) {
+  const db = connectToDatabase();
+  return db
+    .insert(ai_sync_status)
+    .values({
+      id: processId,
+      running: true,
+    })
+    .execute()
+    .then(() => ({ success: true }))
+    .catch((error) => {
+      console.error("❌ Error creating process in database:", error);
+      return { error: "Error while creating process in database" };
+    });
+}
+
+function updateProcessStatusInDatabase(
+  processId: string,
+  errorMessage?: string,
+) {
+  const db = connectToDatabase();
+  return db
+    .update(ai_sync_status)
+    .set({
+      running: false,
+      error: errorMessage,
+    })
+    .where(eq(ai_sync_status.id, processId))
+    .execute()
+    .then(() => ({ success: true }))
+    .catch((error) => {
+      console.error("❌ Error updating process status in database:", error);
+      return { error: "Error while updating process status in database" };
+    });
+}
+
 export async function synchronizeAudioWithExistingLyrics(
   gcpAudioUri: string,
   songId: string,
 ): Promise<{
+  processId: string;
   success: boolean;
   error?: string;
 }> {
+  const processId = uuidv4();
+
   try {
+    const processCreationResult = await createProcessOnDatabase(processId);
+    if ("error" in processCreationResult) {
+      return { processId, success: false, error: processCreationResult.error };
+    }
     const latestLyricsResult = await getLatestLyricsOfSong(songId);
     if ("error" in latestLyricsResult) {
-      return { success: false, error: latestLyricsResult.error };
+      updateProcessStatusInDatabase(processId, latestLyricsResult.error);
+      return { processId, success: false, error: latestLyricsResult.error };
     }
     const lyrics = latestLyricsResult.lyrics;
     const fileUri = gcpAudioUri;
+    after(async () => {
+      const speechResult = await processTextToSpeach(fileUri);
+      if ("error" in speechResult) {
+        updateProcessStatusInDatabase(processId, speechResult.error);
+        return { processId, success: false, error: speechResult.error };
+      }
+      await deleteFileFromGCS(fileUri);
+      const aiResult = await AIForProcessAlingnment(
+        lyrics,
+        speechResult.result ?? [],
+      );
 
-    const speechResult = await processTextToSpeach(fileUri);
-    if ("error" in speechResult) {
-      return { success: false, error: speechResult.error };
-    }
-    await deleteFileFromGCS(fileUri);
-    const aiResult = await AIForProcessAlingnment(
-      lyrics,
-      speechResult.result ?? [],
-    );
+      if ("error" in aiResult) {
+        updateProcessStatusInDatabase(processId, aiResult.error);
+        return { processId, success: false, error: aiResult.error };
+      }
 
-    if ("error" in aiResult) {
-      return { success: false, error: aiResult.error };
-    }
-
-    await updateStartAndEndInDatabaseFromAiResponse(lyrics, aiResult.response);
-    invalidateISG();
+      await updateStartAndEndInDatabaseFromAiResponse(
+        lyrics,
+        aiResult.response,
+      );
+      invalidateISG();
+      updateProcessStatusInDatabase(processId);
+    });
     return {
+      processId,
       success: true,
     };
   } catch (error) {
     console.error("❌ Form data validation error:", error);
     return {
+      processId,
       success: false,
       error: "Unknown error during form data validation",
     };
   }
+}
+
+export async function getProcessIdStatus(processId: string): Promise<{
+  error?: string;
+  running?: boolean;
+}> {
+  const db = connectToDatabase();
+  return db
+    .select()
+    .from(ai_sync_status)
+    .where(eq(ai_sync_status.id, processId))
+    .then((result) => {
+      if (result.length === 0) {
+        return { error: "Process ID not found" };
+      }
+      const process = result[0];
+      return { running: process.running, error: process.error ?? undefined };
+    })
+    .catch((error) => {
+      console.error("❌ Error fetching process status from database:", error);
+      return { error: "Error while fetching process status" };
+    });
 }
 
 export async function getPreSignedUrlForAudioUpload(
