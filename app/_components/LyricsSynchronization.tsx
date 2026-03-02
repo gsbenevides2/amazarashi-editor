@@ -3,7 +3,11 @@
 
 import { useState, useRef, useEffect, useCallback, useTransition } from "react";
 import { saveLyrics, Lyrics } from "../_actions/lyrics";
-import { synchronizeAudioWithExistingLyrics } from "../_actions/speech-to-text";
+import {
+  synchronizeAudioWithExistingLyrics,
+  getPreSignedUrlForAudioUpload,
+} from "../_actions/speech-to-text";
+import { uploadFileDirectly } from "../_utils/upload";
 
 declare global {
   interface Window {
@@ -89,8 +93,9 @@ export default function LyricsSynchronization({
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [autoSyncErrorMessage, setAutoSyncErrorMessage] = useState<string>("");
   const [autoSyncState, setAutoSyncState] = useState<
-    "idle" | "processing" | "success" | "error"
+    "idle" | "uploading" | "processing" | "success" | "error"
   >("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const playerRef = useRef<YTPlayer | null>(null);
   const previewIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -129,17 +134,30 @@ export default function LyricsSynchronization({
   const handleAutoSync = () => {
     if (!audioFile || !currentLyrics) return;
 
-    setAutoSyncState("processing");
+    setAutoSyncState("uploading");
+    setAutoSyncErrorMessage("");
+    setUploadProgress(0);
 
-    const formData = new FormData();
-    formData.append("audio", audioFile);
-    formData.append("songId", currentLyrics.musicId);
-
-    synchronizeAudioWithExistingLyrics(formData)
+    getPreSignedUrlForAudioUpload(audioFile.name, audioFile.type)
+      .then((result) => {
+        if ("error" in result) {
+          throw new Error(result.error);
+        }
+        const { gcsUri, signedUrl } = result;
+        return uploadFileDirectly(audioFile, signedUrl, setUploadProgress).then(
+          () => gcsUri,
+        );
+      })
+      .then((gcsUri) => {
+        setAutoSyncState("processing");
+        return synchronizeAudioWithExistingLyrics(
+          gcsUri,
+          currentLyrics.musicId,
+        );
+      })
       .then((result) => {
         if (result.success) {
           setAutoSyncState("success");
-          // Optionally, you could also update the local state with the new timestamps here
         } else {
           setAutoSyncState("error");
           setAutoSyncErrorMessage(result.error || "Unknown error");
@@ -147,7 +165,9 @@ export default function LyricsSynchronization({
       })
       .catch((error) => {
         setAutoSyncState("error");
-        setAutoSyncErrorMessage(String(error));
+        if (error instanceof Error) {
+          setAutoSyncErrorMessage(error.message);
+        }
       });
   };
 
@@ -314,10 +334,12 @@ export default function LyricsSynchronization({
             />
 
             {audioFile && (
-              <p className="mt-2 text-neutral-500 text-xs">
-                Arquivo: {audioFile.name} (
-                {(audioFile.size / 1024 / 1024).toFixed(2)} MB)
-              </p>
+              <div className="space-y-1 mt-2">
+                <p className="text-neutral-500 text-xs">
+                  Arquivo: {audioFile.name} (
+                  {(audioFile.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+              </div>
             )}
           </div>
 
@@ -325,11 +347,18 @@ export default function LyricsSynchronization({
             <button
               onClick={handleAutoSync}
               disabled={
-                !audioFile || autoSyncState !== "idle" || !currentLyrics
+                !audioFile ||
+                (autoSyncState !== "idle" && autoSyncState !== "success") ||
+                !currentLyrics
               }
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-600 px-4 py-2 rounded text-white text-sm disabled:cursor-not-allowed"
             >
-              {autoSyncState === "processing" ? (
+              {autoSyncState === "uploading" ? (
+                <>
+                  <div className="border-white border-b-2 rounded-full w-4 h-4 animate-spin"></div>
+                  Enviando... {uploadProgress}%
+                </>
+              ) : autoSyncState === "processing" ? (
                 <>
                   <div className="border-white border-b-2 rounded-full w-4 h-4 animate-spin"></div>
                   Processando...
@@ -340,6 +369,22 @@ export default function LyricsSynchronization({
             </button>
           </div>
 
+          {autoSyncState === "uploading" && (
+            <div className="space-y-2 bg-blue-900/30 px-3 py-2 border border-blue-700 rounded text-blue-200 text-sm">
+              <div className="flex justify-between items-center">
+                <span>📤 Enviando arquivo para o Cloud Storage...</span>
+                <span className="font-mono">{uploadProgress}%</span>
+              </div>
+              {uploadProgress > 0 && (
+                <div className="bg-blue-800 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-blue-400 h-full transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              )}
+            </div>
+          )}
           {autoSyncState === "processing" && (
             <div className="bg-blue-900/30 px-3 py-2 border border-blue-700 rounded text-blue-200 text-sm">
               ⏳ Processando o áudio e gerando timestamps com AI...

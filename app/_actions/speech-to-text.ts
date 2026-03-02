@@ -315,27 +315,19 @@ function updateStartAndEndInDatabaseFromAiResponse(
 }
 
 export async function synchronizeAudioWithExistingLyrics(
-  formData: FormData,
+  gcpAudioUri: string,
+  songId: string,
 ): Promise<{
   success: boolean;
   error?: string;
 }> {
   try {
-    const validation = validateFormData(formData);
-    if ("error" in validation) {
-      return { success: false, error: validation.error };
-    }
-    const { file, songId } = validation;
     const latestLyricsResult = await getLatestLyricsOfSong(songId);
     if ("error" in latestLyricsResult) {
       return { success: false, error: latestLyricsResult.error };
     }
     const lyrics = latestLyricsResult.lyrics;
-    const uploadResult = await uploadFileToGCS(file, songId);
-    if ("error" in uploadResult) {
-      return { success: false, error: uploadResult.error };
-    }
-    const { fileUri } = uploadResult;
+    const fileUri = gcpAudioUri;
 
     const speechResult = await processTextToSpeach(fileUri);
     if ("error" in speechResult) {
@@ -363,4 +355,40 @@ export async function synchronizeAudioWithExistingLyrics(
       error: "Unknown error during form data validation",
     };
   }
+}
+
+export async function getPreSignedUrlForAudioUpload(
+  fileName: string,
+  contentType: string,
+): Promise<
+  | {
+      signedUrl: string;
+      gcsUri: string;
+    }
+  | { error: string }
+> {
+  const bucketName = process.env.GCS_BUCKET_NAME;
+  if (!bucketName) {
+    return { error: "Error while get signed url to upload" };
+  }
+  const fileExtension = getFileExtension(fileName);
+  const uniqueId = uuidv4();
+  const gcsFileName = `amazarashi/audio/${uniqueId}_${Date.now()}${fileExtension}`;
+  const storage = new Storage(getGCPCredentials());
+  const file = storage.bucket(bucketName).file(gcsFileName);
+  return file
+    .getSignedUrl({
+      version: "v4",
+      action: "write",
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+      contentType,
+    })
+    .then(([signedUrl]) => ({
+      signedUrl,
+      gcsUri: `gs://${bucketName}/${gcsFileName}`,
+    }))
+    .catch((error) => {
+      console.error("❌ Error generating signed URL:", error);
+      return { error: "Error while generating signed URL" };
+    });
 }
