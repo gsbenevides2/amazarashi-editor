@@ -12,12 +12,13 @@ import {
 } from "@/app/_utils/gcs";
 import {
   AIAlignmentResult,
-  sendToGeminiForProcessAlingnment,
+  // sendToGeminiForProcessAlingnment,
 } from "@/app/_utils/gemini";
 //import { processTextToSpeachUsingGST } from "@/app/_utils/gst";
 import { invalidateISG } from "@/app/_utils/invalidateISG";
 import { connectToDatabase } from "@/db";
 import { ai_sync_status, lyrics_lines } from "@/db/schema";
+import { syncLyrics } from "../_utils/algorithm";
 
 function getLatestLyricsOfSong(songId: string): Promise<
   | {
@@ -142,10 +143,19 @@ export async function synchronizeAudioWithExistingLyrics(
         return { processId, success: false, error: speechResult.error };
       }
       await deleteFileFromGCS(fileUri);
+      const aiResult = syncLyrics({
+        data: {
+          lyrics,
+          response: speechResult.result ?? [],
+        },
+        success: true,
+      })
+      /*
       const aiResult = await sendToGeminiForProcessAlingnment(
         lyrics,
         speechResult.result ?? [],
       );
+      */
 
       if ("error" in aiResult) {
         updateProcessStatusInDatabase(processId, aiResult.error);
@@ -154,7 +164,9 @@ export async function synchronizeAudioWithExistingLyrics(
 
       await updateStartAndEndInDatabaseFromAiResponse(
         lyrics,
-        aiResult.response,
+        {
+          data: aiResult,
+        },
       );
       invalidateISG();
       updateProcessStatusInDatabase(processId);
