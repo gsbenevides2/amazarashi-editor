@@ -1,19 +1,15 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { SpeechToTextCharacterResponseModel } from "@elevenlabs/elevenlabs-js/api/types";
-import { char } from "drizzle-orm/mysql-core";
 
 import { getPreSignedUrlForAudioDownload } from "@/app/_utils/gcs";
 import { ProcessTextToSpeechResult } from "@/app/_utils/gst";
+import { transformSecondsToTimeFormat } from "@/app/_utils/time";
 
 type SpeechToTextCharacterResponseModelStrict = {
   [K in keyof SpeechToTextCharacterResponseModel]-?: NonNullable<
     SpeechToTextCharacterResponseModel[K]
   >;
 };
-
-function secondsToNanosBigInt(seconds: number): bigint {
-  return BigInt(Math.round(seconds * 1_000_000_000));
-}
 
 export async function processTextToSpeachUsingElevenLabs(
   gcpAudioUri: string,
@@ -45,10 +41,8 @@ export async function processTextToSpeachUsingElevenLabs(
         )
         .map((charInfo) => ({
           word: charInfo.text,
-          startSeconds: charInfo.start.toString(),
-          startNanos: secondsToNanosBigInt(charInfo.start).toString(),
-          endSeconds: charInfo.end.toString(),
-          endNanos: secondsToNanosBigInt(charInfo.end).toString(),
+          start: transformSecondsToTimeFormat(charInfo.start),
+          end: transformSecondsToTimeFormat(charInfo.end),
         })),
     }))
     .catch((error) => {

@@ -1,13 +1,15 @@
 import { SpeechClient } from "@google-cloud/speech";
 
 import { getGCPCredentials } from "@/app/_utils/gcp";
+import {
+  transformNanoSeccondsToTimeFormat,
+  transformNonBigIntNanoToBigIntNano,
+} from "@/app/_utils/time";
 
 export interface SpeechToTextResult {
   word: string;
-  startSeconds: string;
-  startNanos: string;
-  endSeconds: string;
-  endNanos: string;
+  start: string;
+  end: string;
 }
 
 export type ProcessTextToSpeechResult =
@@ -41,13 +43,18 @@ export async function processTextToSpeachUsingGST(
         response.results?.flatMap(
           (result) =>
             result.alternatives?.[0].words?.flatMap((wordInfo) => {
-              const startSeconds =
-                wordInfo.startTime?.seconds?.toString() ?? "";
-              const startNanos = wordInfo.startTime?.nanos?.toString() ?? "";
-              const endSeconds = wordInfo.endTime?.seconds?.toString() ?? "";
-              const endNanos = wordInfo.endTime?.nanos?.toString() ?? "";
+              const start = transformNanoSeccondsToTimeFormat(
+                transformNonBigIntNanoToBigIntNano(
+                  wordInfo.startTime?.nanos ?? 0,
+                ),
+              );
+              const end = transformNanoSeccondsToTimeFormat(
+                transformNonBigIntNanoToBigIntNano(
+                  wordInfo.endTime?.nanos ?? 0,
+                ),
+              );
               const word = wordInfo.word ?? "";
-              return { word, startSeconds, startNanos, endSeconds, endNanos };
+              return { word, start, end };
             }) ?? [],
         ) ?? [],
     }))

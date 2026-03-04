@@ -33,7 +33,7 @@ export async function sendToGeminiForProcessAlingnment(
   });
   return ai.models
     .generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-pro-preview",
       config: {
         thinkingConfig: {
           thinkingLevel: ThinkingLevel.HIGH,

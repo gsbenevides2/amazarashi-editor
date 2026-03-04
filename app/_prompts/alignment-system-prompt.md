@@ -17,10 +17,8 @@ O JSON de entrada tem a seguinte estrutura:
     "response": [
       {
         "word": "応答",
-        "startSeconds": "0",
-        "startNanos": "100000000",
-        "endSeconds": "10",
-        "endNanos": "300000000"
+        "start": "00:00:00.10",
+        "end": "00:00:10.30"
       }
     ],
     "lyrics": {
@@ -46,8 +44,8 @@ O JSON de entrada tem a seguinte estrutura:
 
 **Campos relevantes em `response`:**
 - `word` — palavra detectada no áudio (pode diferir da letra por erros de STT)
-- `startSeconds` + `startNanos` — início da palavra em segundos + nanossegundos
-- `endSeconds` + `endNanos` — fim da palavra
+- `start` — timestamp de início da palavra no formato `HH:MM:SS.ss`
+- `end` — timestamp de fim da palavra no formato `HH:MM:SS.ss`
 
 **Campos relevantes em `lyrics.lines`:**
 - `start` / `end` — timestamps no formato `HH:MM:SS.ss` a serem corrigidos
@@ -74,11 +72,12 @@ Retorne **somente** um array com os campos `position`, `start` e `end` de cada l
 
 ### Passo 1 — Conversão de timestamps do `response`
 
-Converta cada palavra para segundos decimais:
+Converta cada palavra para segundos decimais a partir do formato `HH:MM:SS.ss`:
 
 ```python
-def to_sec(word):
-    return int(word["startSeconds"]) + int(word["startNanos"]) / 1_000_000_000
+def to_sec(ts):
+    h, m, s = ts.split(":")
+    return int(h) * 3600 + int(m) * 60 + float(s)
 ```
 
 ### Passo 2 — Normalização de texto
@@ -150,8 +149,8 @@ def match_line(norm_line, all_words, word_idx):
                 break
 
     if best_score >= THRESHOLD:
-        start = to_sec(all_words[best_i])
-        end   = int(all_words[best_j]["endSeconds"]) + int(all_words[best_j]["endNanos"]) / 1e9
+        start = to_sec(all_words[best_i]["start"])
+        end   = to_sec(all_words[best_j]["end"])
         if end <= start:
             end = start + 2.0
         return start, end, best_j + 1  # novo word_idx
@@ -245,8 +244,8 @@ def sec_to_ts(s):
 {
   "data": {
     "response": [
-      { "word": "応答", "startSeconds": "0",  "startNanos": "100000000", "endSeconds": "10", "endNanos": "300000000" },
-      { "word": "せよ", "startSeconds": "10", "startNanos": "300000000", "endSeconds": "10", "endNanos": "400000000" }
+      { "word": "応答", "start": "00:00:00.10", "end": "00:00:10.30" },
+      { "word": "せよ", "start": "00:00:10.30", "end": "00:00:10.40" }
     ],
     "lyrics": {
       "lines": [
