@@ -1,152 +1,23 @@
 "use server";
 
-import { getLyrics, Lyrics } from "./lyrics";
-import path from "path";
-import { getGCPCredentials } from "../_utils/gcp";
-import { Storage } from "@google-cloud/storage";
-import { SpeechClient } from "@google-cloud/speech";
-import { v4 as uuidv4 } from "uuid";
-import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
-import fs from "fs";
-import { connectToDatabase } from "@/db";
 import { eq } from "drizzle-orm";
-import { ai_sync_status, lyrics_lines } from "@/db/schema";
-import { invalidateISG } from "../_utils/invalidateISG";
 import { after } from "next/server";
+import { v4 as uuidv4 } from "uuid";
 
-interface SpeechToTextResult {
-  word: string;
-  startSeconds: string;
-  startNanos: string;
-  endSeconds: string;
-  endNanos: string;
-}
-
-interface AiResponse {
-  data: {
-    position: number;
-    start: string;
-    end: string;
-  }[];
-}
-
-async function AIForProcessAlingnment(
-  lyrics: Lyrics,
-  speechToTextResult: SpeechToTextResult[],
-): Promise<
-  | {
-      error: string;
-    }
-  | {
-      response: AiResponse;
-    }
-> {
-  const systemPrompt = fs.readFileSync(
-    process.cwd() + "/app/_prompts/alignment-system-prompt.md",
-    "utf-8",
-  );
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY || "",
-  });
-  return ai.models
-    .generateContent({
-      model: "gemini-3-flash-preview",
-      config: {
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.HIGH,
-        },
-        responseMimeType: "application/json",
-        responseJsonSchema: {
-          type: Type.OBJECT,
-          required: ["data"],
-          properties: {
-            data: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                required: ["position", "start", "end"],
-                properties: {
-                  position: {
-                    type: Type.NUMBER,
-                  },
-                  start: {
-                    type: Type.STRING,
-                  },
-                  end: {
-                    type: Type.STRING,
-                  },
-                },
-              },
-            },
-          },
-        },
-        systemInstruction: [{ text: systemPrompt }],
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: JSON.stringify({ lyrics, speechToTextResult }) }],
-        },
-      ],
-    })
-    .then((response) => {
-      if (!response.candidates || response.candidates.length === 0) {
-        console.error("❌ No candidates in AI response");
-        return { error: "Invalid AI response format" };
-      }
-      const firstPart = response.candidates?.[0].content?.parts?.[0].text;
-      if (!firstPart) {
-        console.error("❌ No text in AI response candidate");
-        return { error: "Invalid AI response format" };
-      }
-      const parsedResponse = JSON.parse(firstPart) as AiResponse;
-      if (!parsedResponse.data) {
-        console.error("❌ No data field in AI response");
-        return { error: "Invalid AI response format" };
-      }
-      return { response: parsedResponse };
-    })
-    .catch((error) => {
-      console.error("❌ AI processing error:", error);
-      return { error: "Unknown error during AI processing" };
-    });
-}
-
-async function processTextToSpeach(gcpAudioUri: string) {
-  const speachClient = new SpeechClient(getGCPCredentials());
-  return await speachClient
-    .longRunningRecognize({
-      config: {
-        languageCode: "ja-JP",
-        model: "default",
-        enableWordTimeOffsets: true,
-        enableAutomaticPunctuation: true,
-        encoding: "OGG_OPUS",
-        sampleRateHertz: 48000,
-        audioChannelCount: 2,
-        useEnhanced: true,
-      },
-      audio: { uri: gcpAudioUri },
-    })
-    .then(([operation]) => operation.promise())
-    .then(([response]) => ({
-      result: response.results?.flatMap(
-        (result) =>
-          result.alternatives?.[0].words?.flatMap((wordInfo) => {
-            const startSeconds = wordInfo.startTime?.seconds?.toString() ?? "";
-            const startNanos = wordInfo.startTime?.nanos?.toString() ?? "";
-            const endSeconds = wordInfo.endTime?.seconds?.toString() ?? "";
-            const endNanos = wordInfo.endTime?.nanos?.toString() ?? "";
-            const word = wordInfo.word ?? "";
-            return { word, startSeconds, startNanos, endSeconds, endNanos };
-          }) ?? [],
-      ),
-    }))
-    .catch((error) => {
-      console.error("❌ Speech-to-Text processing error:", error);
-      return { error: "Unknown error during audio processing" };
-    });
-}
+import { getLyrics, Lyrics } from "@/app/_actions/lyrics";
+import { processTextToSpeachUsingElevenLabs } from "@/app/_utils/elevenLabs";
+import {
+  deleteFileFromGCS,
+  getPreSignedUrlForAudioUpload as getPreSignedUrlForAudioUploadInternal,
+} from "@/app/_utils/gcs";
+import {
+  AIAlignmentResult,
+  sendToGeminiForProcessAlingnment,
+} from "@/app/_utils/gemini";
+//import { processTextToSpeachUsingGST } from "@/app/_utils/gst";
+import { invalidateISG } from "@/app/_utils/invalidateISG";
+import { connectToDatabase } from "@/db";
+import { ai_sync_status, lyrics_lines } from "@/db/schema";
 
 function getLatestLyricsOfSong(songId: string): Promise<
   | {
@@ -174,118 +45,9 @@ function getLatestLyricsOfSong(songId: string): Promise<
     });
 }
 
-function getFileExtension(fileName: string): string {
-  return path.extname(fileName).toLowerCase();
-}
-
-function validateFormData(
-  formData: FormData,
-): { file: File; songId: string } | { error: string } {
-  const ALLOWED_EXTENSIONS = [".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus"];
-  const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
-  const file = formData.get("audio") as File | null;
-  const songId = formData.get("songId") as string | null;
-
-  if (!file) {
-    return { error: "Audio file is required" };
-  }
-  const fileExtension = getFileExtension(file.name);
-  if (!ALLOWED_EXTENSIONS.includes(fileExtension)) {
-    return {
-      error: `Invalid file type. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}`,
-    };
-  }
-  if (file.size > MAX_FILE_SIZE) {
-    return {
-      error: `File size exceeds the maximum allowed size of ${(
-        MAX_FILE_SIZE /
-        (1024 * 1024)
-      ).toFixed(2)} MB`,
-    };
-  }
-  if (!songId) {
-    return { error: "Song ID is required" };
-  }
-
-  return { file, songId };
-}
-
-async function uploadFileToGCS(
-  file: File,
-  songId: string,
-): Promise<
-  | {
-      fileUri: string;
-    }
-  | { error: string }
-> {
-  const bucketName = process.env.GCS_BUCKET_NAME;
-  if (!bucketName) {
-    return Promise.resolve({
-      error: "Error while uploading file.",
-    });
-  }
-  const fileExtension = getFileExtension(file.name);
-  const uniqueId = uuidv4();
-
-  const fileName = `amazarashi/audio/${uniqueId}_${Date.now()}${fileExtension}`;
-
-  const bufferResult = await file
-    .arrayBuffer()
-    .then((result) => {
-      return { buffer: Buffer.from(result) };
-    })
-    .catch((error) => {
-      console.error("❌ Error reading file as ArrayBuffer:", error);
-      return { error: "Error while reading file" };
-    });
-
-  if ("error" in bufferResult) {
-    return Promise.resolve({
-      error: bufferResult.error,
-    });
-  }
-  const buffer = bufferResult.buffer;
-  const storage = new Storage(getGCPCredentials());
-  const gcsFile = storage.bucket(bucketName).file(fileName);
-  return gcsFile
-    .save(buffer, {
-      contentType: file.type || "audio/mpeg",
-      metadata: {
-        originalName: file.name,
-        uploadedAt: new Date().toISOString(),
-        songId,
-      },
-    })
-    .then(() => {
-      const fileUri = `gs://${bucketName}/${fileName}`;
-      return { fileUri };
-    })
-    .catch((error) => {
-      console.error("❌ Error uploading file to GCS:", error);
-      return { error: "Error while uploading file" };
-    });
-}
-
-function parseGCSUri(uri: string): { bucketName: string; filePath: string } {
-  if (!uri.startsWith("gs://")) {
-    throw new Error("Invalid GCS URI");
-  }
-  const parts = uri.slice(5).split("/");
-  const bucketName = parts.shift() || "";
-  const filePath = parts.join("/");
-  return { bucketName, filePath };
-}
-
-async function deleteFileFromGCS(fileUri: string): Promise<void> {
-  const storage = new Storage(getGCPCredentials());
-  const { bucketName, filePath } = parseGCSUri(fileUri);
-  await storage.bucket(bucketName).file(filePath).delete();
-}
-
 function updateStartAndEndInDatabaseFromAiResponse(
   lyrics: Lyrics,
-  aiResponse: AiResponse,
+  aiResponse: AIAlignmentResult,
 ) {
   const db = connectToDatabase();
   const updatePromises = aiResponse.data.map((item) => {
@@ -374,13 +136,13 @@ export async function synchronizeAudioWithExistingLyrics(
     const lyrics = latestLyricsResult.lyrics;
     const fileUri = gcpAudioUri;
     after(async () => {
-      const speechResult = await processTextToSpeach(fileUri);
+      const speechResult = await processTextToSpeachUsingElevenLabs(fileUri);
       if ("error" in speechResult) {
         updateProcessStatusInDatabase(processId, speechResult.error);
         return { processId, success: false, error: speechResult.error };
       }
       await deleteFileFromGCS(fileUri);
-      const aiResult = await AIForProcessAlingnment(
+      const aiResult = await sendToGeminiForProcessAlingnment(
         lyrics,
         speechResult.result ?? [],
       );
@@ -443,28 +205,5 @@ export async function getPreSignedUrlForAudioUpload(
     }
   | { error: string }
 > {
-  const bucketName = process.env.GCS_BUCKET_NAME;
-  if (!bucketName) {
-    return { error: "Error while get signed url to upload" };
-  }
-  const fileExtension = getFileExtension(fileName);
-  const uniqueId = uuidv4();
-  const gcsFileName = `amazarashi/audio/${uniqueId}_${Date.now()}${fileExtension}`;
-  const storage = new Storage(getGCPCredentials());
-  const file = storage.bucket(bucketName).file(gcsFileName);
-  return file
-    .getSignedUrl({
-      version: "v4",
-      action: "write",
-      expires: Date.now() + 60 * 60 * 1000, // 1 hour
-      contentType,
-    })
-    .then(([signedUrl]) => ({
-      signedUrl,
-      gcsUri: `gs://${bucketName}/${gcsFileName}`,
-    }))
-    .catch((error) => {
-      console.error("❌ Error generating signed URL:", error);
-      return { error: "Error while generating signed URL" };
-    });
+  return getPreSignedUrlForAudioUploadInternal(fileName, contentType);
 }
