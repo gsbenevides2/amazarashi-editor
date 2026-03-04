@@ -88,7 +88,10 @@ function lcsLen(a: string, b: string): number {
 
 function commonChars(a: string, b: string): number {
   const freq = (s: string) =>
-    [...s].reduce((m, c) => m.set(c, (m.get(c) ?? 0) + 1), new Map<string, number>());
+    [...s].reduce(
+      (m, c) => m.set(c, (m.get(c) ?? 0) + 1),
+      new Map<string, number>(),
+    );
   const fa = freq(a);
   const fb = freq(b);
   let total = 0;
@@ -113,13 +116,18 @@ const THRESHOLD = 0.3;
 
 function matchAll(
   lines: LyricLine[],
-  words: ResponseWord[]
+  words: ResponseWord[],
 ): Array<{ start: number | null; end: number | null; score: number }> {
-  const results: Array<{ start: number | null; end: number | null; score: number }> = [];
+  const results: Array<{
+    start: number | null;
+    end: number | null;
+    score: number;
+  }> = [];
   let wordIdx = 0;
 
   for (const line of lines) {
-    const hiragana = line.texts.find((t) => t.languageId === "hiragana")?.text ?? "";
+    const hiragana =
+      line.texts.find((t) => t.languageId === "hiragana")?.text ?? "";
     const normLine = normalize(hiragana);
 
     if (!normLine || wordIdx >= words.length) {
@@ -127,7 +135,9 @@ function matchAll(
       continue;
     }
 
-    let bestScore = 0, bestI = wordIdx, bestJ = wordIdx;
+    let bestScore = 0,
+      bestI = wordIdx,
+      bestJ = wordIdx;
     const searchStart = Math.max(0, wordIdx - 3);
     const searchEnd = Math.min(wordIdx + 80, words.length);
 
@@ -136,7 +146,11 @@ function matchAll(
       for (let j = i; j < Math.min(i + 60, words.length); j++) {
         accumulated += normalize(words[j].word);
         const score = scoreMatch(normLine, accumulated);
-        if (score > bestScore) { bestScore = score; bestI = i; bestJ = j; }
+        if (score > bestScore) {
+          bestScore = score;
+          bestI = i;
+          bestJ = j;
+        }
         if (accumulated.length > normLine.length * 2.5) break;
       }
     }
@@ -157,12 +171,13 @@ function matchAll(
 
 function interpolate(
   results: Array<{ start: number | null; end: number | null; score: number }>,
-  words: ResponseWord[]
+  words: ResponseWord[],
 ): void {
   const n = results.length;
   const matched = new Map<number, { start: number; end: number }>();
   results.forEach((r, i) => {
-    if (r.start !== null && r.end !== null) matched.set(i, { start: r.start, end: r.end });
+    if (r.start !== null && r.end !== null)
+      matched.set(i, { start: r.start, end: r.end });
   });
 
   for (let i = 0; i < n; i++) {
@@ -175,9 +190,10 @@ function interpolate(
 
     if (prev !== null && next !== null) {
       const gap = matched.get(next)!.start - matched.get(prev)!.end;
-      const unmatched = Array.from({ length: next - prev - 1 }, (_, k) => prev + 1 + k).filter(
-        (j) => results[j].start === null
-      );
+      const unmatched = Array.from(
+        { length: next - prev - 1 },
+        (_, k) => prev + 1 + k,
+      ).filter((j) => results[j].start === null);
       if (gap > 0 && unmatched.length) {
         const slot = gap / unmatched.length;
         unmatched.forEach((j, k) => {
@@ -189,9 +205,10 @@ function interpolate(
       }
     } else if (prev !== null) {
       // After last match: 4s per line
-      const tail = Array.from({ length: n - prev - 1 }, (_, k) => prev + 1 + k).filter(
-        (j) => results[j].start === null
-      );
+      const tail = Array.from(
+        { length: n - prev - 1 },
+        (_, k) => prev + 1 + k,
+      ).filter((j) => results[j].start === null);
       tail.forEach((j, k) => {
         const s = matched.get(prev)!.end + k * 4.0;
         results[j] = { ...results[j], start: s, end: s + 3.5 };
@@ -199,18 +216,22 @@ function interpolate(
     } else if (next !== null) {
       // Before first match
       const head = Array.from({ length: next }, (_, k) => k).filter(
-        (j) => results[j].start === null
+        (j) => results[j].start === null,
       );
       head.reverse().forEach((j, k) => {
         const e = matched.get(next)!.start - k * 4.0;
-        results[j] = { ...results[j], start: Math.max(0, e - 3.5), end: Math.max(0, e) };
+        results[j] = {
+          ...results[j],
+          start: Math.max(0, e - 3.5),
+          end: Math.max(0, e),
+        };
       });
     }
   }
 }
 
 function fixEnds(
-  results: Array<{ start: number | null; end: number | null; score: number }>
+  results: Array<{ start: number | null; end: number | null; score: number }>,
 ): void {
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
@@ -223,17 +244,27 @@ function fixEnds(
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export function syncLyrics(input: Input): SyncedLine[] {
-  const words = input.data.response;
-  const lines = input.data.lyrics.lines;
+export function syncLyrics(
+  input: Input,
+): { lyrics: SyncedLine[] } | { error: string } {
+  try {
+    const words = input.data.response;
+    const lines = input.data.lyrics.lines;
 
-  const results = matchAll(lines, words);
-  interpolate(results, words);
-  fixEnds(results);
+    const results = matchAll(lines, words);
+    interpolate(results, words);
+    fixEnds(results);
 
-  return lines.map((line, i) => ({
-    position: line.position,
-    start: secToTs(results[i].start ?? toSec(line.start)),
-    end: secToTs(results[i].end ?? toSec(line.end)),
-  }));
+    return {
+      lyrics: lines.map((line, i) => ({
+        position: line.position,
+        start: secToTs(results[i].start ?? toSec(line.start)),
+        end: secToTs(results[i].end ?? toSec(line.end)),
+      })),
+    };
+  } catch (error) {
+    return {
+      error: "Error while syncing lyrics",
+    };
+  }
 }

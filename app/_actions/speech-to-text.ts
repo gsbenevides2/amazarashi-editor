@@ -149,7 +149,7 @@ export async function synchronizeAudioWithExistingLyrics(
           response: speechResult.result ?? [],
         },
         success: true,
-      })
+      });
       /*
       const aiResult = await sendToGeminiForProcessAlingnment(
         lyrics,
@@ -162,12 +162,9 @@ export async function synchronizeAudioWithExistingLyrics(
         return { processId, success: false, error: aiResult.error };
       }
 
-      await updateStartAndEndInDatabaseFromAiResponse(
-        lyrics,
-        {
-          data: aiResult,
-        },
-      );
+      await updateStartAndEndInDatabaseFromAiResponse(lyrics, {
+        data: aiResult.lyrics,
+      });
       invalidateISG();
       updateProcessStatusInDatabase(processId);
     });
