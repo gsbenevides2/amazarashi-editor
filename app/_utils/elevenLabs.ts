@@ -25,6 +25,8 @@ export async function processTextToSpeachUsingElevenLabs(
   return elevenLabsClient.speechToText
     .convert({
       modelId: "scribe_v2",
+      languageCode: "ja",
+      tagAudioEvents: true,
       cloudStorageUrl: urlResult.signedUrl,
     })
     .then((response) => ({

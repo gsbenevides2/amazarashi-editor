@@ -5,20 +5,16 @@ import { after } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 
 import { getLyrics, Lyrics } from "@/app/_actions/lyrics";
+import { syncLyrics } from "@/app/_utils/algorithm";
 import { processTextToSpeachUsingElevenLabs } from "@/app/_utils/elevenLabs";
 import {
   deleteFileFromGCS,
   getPreSignedUrlForAudioUpload as getPreSignedUrlForAudioUploadInternal,
 } from "@/app/_utils/gcs";
-import {
-  AIAlignmentResult,
-  // sendToGeminiForProcessAlingnment,
-} from "@/app/_utils/gemini";
-//import { processTextToSpeachUsingGST } from "@/app/_utils/gst";
+import { AIAlignmentResult } from "@/app/_utils/gemini";
 import { invalidateISG } from "@/app/_utils/invalidateISG";
 import { connectToDatabase } from "@/db";
 import { ai_sync_status, lyrics_lines } from "@/db/schema";
-import { syncLyrics } from "../_utils/algorithm";
 
 function getLatestLyricsOfSong(songId: string): Promise<
   | {
@@ -150,12 +146,6 @@ export async function synchronizeAudioWithExistingLyrics(
         },
         success: true,
       });
-      /*
-      const aiResult = await sendToGeminiForProcessAlingnment(
-        lyrics,
-        speechResult.result ?? [],
-      );
-      */
 
       if ("error" in aiResult) {
         updateProcessStatusInDatabase(processId, aiResult.error);
