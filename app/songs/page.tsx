@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import { getSongs } from "../_actions/songs";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +17,20 @@ export default async function SongsPage() {
     <div className="mx-auto max-w-5xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-bold text-2xl">Músicas</h1>
-        <Link
-          href="/songs/new"
-          className="bg-white hover:bg-neutral-200 px-4 py-2 rounded font-semibold text-black"
-        >
-          Adicionar Nova Música
-        </Link>
+        <div className="flex gap-3">
+          <Link
+            href="/lyrics/import"
+            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-semibold text-white"
+          >
+            Importar JSON
+          </Link>
+          <Link
+            href="/songs/new"
+            className="bg-white hover:bg-neutral-200 px-4 py-2 rounded font-semibold text-black"
+          >
+            Adicionar Nova Música
+          </Link>
+        </div>
       </div>
 
       {songs.length === 0 ? (

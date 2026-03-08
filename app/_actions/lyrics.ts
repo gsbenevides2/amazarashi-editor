@@ -1,5 +1,8 @@
 "use server";
 
+import { eq, asc, inArray } from "drizzle-orm";
+
+import { invalidateISG } from "@/app/_utils/invalidateISG";
 import { connectToDatabase } from "@/db";
 import {
   lyricsTable,
@@ -7,8 +10,6 @@ import {
   lyrics_lines_texts,
   languagesTable,
 } from "@/db/schema";
-import { eq, asc, inArray } from "drizzle-orm";
-import { invalidateISG } from "../_utils/invalidateISG";
 
 export interface LyricsLineText {
   id: string;
@@ -182,13 +183,117 @@ export async function deleteLyricsVersion(lyricsId: string) {
   return { success: true };
 }
 
+export interface LyricsJsonInput {
+  hiragana: string;
+  romanji: string;
+  portuguese: string;
+  start: string;
+  end: string;
+}
+
+export async function importLyricsFromJson(
+  songId: string,
+  jsonData: LyricsJsonInput[],
+): Promise<Lyrics> {
+  const db = connectToDatabase();
+
+  if (!Array.isArray(jsonData) || jsonData.length === 0) {
+    throw new Error("Dados JSON inválidos ou vazios.");
+  }
+
+  for (const item of jsonData) {
+    if (
+      !item.hiragana ||
+      !item.romanji ||
+      !item.portuguese ||
+      !item.start ||
+      !item.end
+    ) {
+      throw new Error(
+        "Todos os campos (hiragana, romanji, portuguese, start, end) são obrigatórios.",
+      );
+    }
+  }
+
+  const lyricsId = await createLyricsVersion(songId);
+
+  const languages = await db.select().from(languagesTable);
+  const hiraganaLang = languages.find((l) => l.id === "hiragana");
+  const romanjiLang = languages.find((l) => l.id === "romanji");
+  const portugueseLang = languages.find((l) => l.id === "portuguese");
+
+  if (!hiraganaLang || !romanjiLang || !portugueseLang) {
+    throw new Error(
+      "Idiomas necessários (hiragana, romanji, portuguese) não encontrados no sistema.",
+    );
+  }
+
+  const lyricsLines: LyricsLine[] = jsonData.map((item, index) => {
+    return {
+      id: crypto.randomUUID(),
+      position: index,
+      start: item.start,
+      end: item.end,
+      texts: [
+        {
+          id: crypto.randomUUID(),
+          languageId: hiraganaLang.id,
+          text: item.hiragana,
+        },
+        {
+          id: crypto.randomUUID(),
+          languageId: romanjiLang.id,
+          text: item.romanji,
+        },
+        {
+          id: crypto.randomUUID(),
+          languageId: portugueseLang.id,
+          text: item.portuguese,
+        },
+      ],
+    };
+  });
+
+  await db.transaction(async (tx) => {
+    await tx.insert(lyrics_lines).values(
+      lyricsLines.map((line) => ({
+        id: line.id,
+        lyricsId,
+        position: line.position,
+        start: line.start,
+        end: line.end,
+      })),
+    );
+
+    const allTexts = lyricsLines.flatMap((line) =>
+      line.texts.map((text) => ({
+        id: text.id,
+        lyricsLineId: line.id,
+        languageId: text.languageId,
+        text: text.text,
+      })),
+    );
+
+    if (allTexts.length > 0) {
+      await tx.insert(lyrics_lines_texts).values(allTexts);
+    }
+  });
+
+  invalidateISG();
+
+  return {
+    id: lyricsId,
+    musicId: songId,
+    lines: lyricsLines,
+  };
+}
+
 export async function importLyricsFromText(
   songId: string,
   text: string,
 ): Promise<Lyrics> {
   const db = connectToDatabase();
 
-  // Split text into lines and filter out empty lines
   const textLines = text
     .split("\n")
     .map((line) => line.trim())
@@ -198,10 +303,8 @@ export async function importLyricsFromText(
     throw new Error("Nenhuma linha válida encontrada no texto.");
   }
 
-  // Create a new lyrics version
   const lyricsId = await createLyricsVersion(songId);
 
-  // Get Hiragana language ID
   const languages = await db.select().from(languagesTable);
   const hiraganaLanguage = languages.find((l) => l.id === "hiragana");
 
@@ -209,12 +312,10 @@ export async function importLyricsFromText(
     throw new Error("Idioma Hiragana não encontrado no sistema.");
   }
 
-  // Create lyrics lines with 5-second intervals
   const lyricsLines: LyricsLine[] = textLines.map((lineText, index) => {
     const startSeconds = index * 5;
     const endSeconds = startSeconds + 5;
 
-    // Format time as HH:MM:SS.ms
     const formatTime = (seconds: number) => {
       const hours = Math.floor(seconds / 3600);
       const minutes = Math.floor((seconds % 3600) / 60);
@@ -237,9 +338,7 @@ export async function importLyricsFromText(
     };
   });
 
-  // Save to database
   await db.transaction(async (tx) => {
-    // Insert lines
     await tx.insert(lyrics_lines).values(
       lyricsLines.map((line) => ({
         id: line.id,
@@ -250,7 +349,6 @@ export async function importLyricsFromText(
       })),
     );
 
-    // Insert texts
     const allTexts = lyricsLines.flatMap((line) =>
       line.texts.map((text) => ({
         id: text.id,

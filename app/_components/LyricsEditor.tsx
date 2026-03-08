@@ -1,16 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
+
 import {
   saveLyrics,
   createLyricsVersion,
   deleteLyricsVersion,
   importLyricsFromText,
+  importLyricsFromJson,
+  LyricsJsonInput,
   Lyrics,
   LyricsLine,
-} from "../_actions/lyrics";
-import { translateLyrics } from "../_actions/translate";
-import LyricsImportModal from "./LyricsImportModal";
+} from "@/app/_actions/lyrics";
+import { translateLyrics } from "@/app/_actions/translate";
+import LyricsImportModal from "@/app/_components/LyricsImportModal";
+import LyricsJsonImportModal from "@/app/_components/LyricsJsonImportModal";
 
 interface Language {
   id: string;
@@ -41,7 +45,9 @@ export default function LyricsEditor({
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showJsonImportModal, setShowJsonImportModal] = useState(false);
   const [isImporting, startImportTransition] = useTransition();
+  const [isImportingJson, startJsonImportTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
 
   const currentLyrics = lyricsArray[selectedLyricsIndex];
@@ -282,6 +288,23 @@ export default function LyricsEditor({
     });
   };
 
+  const handleJsonImportLyrics = (jsonData: LyricsJsonInput[]) => {
+    setError(null);
+    setSaveSuccess(false);
+    startJsonImportTransition(async () => {
+      try {
+        const newLyrics = await importLyricsFromJson(songId, jsonData);
+        setLyricsArray([...lyricsArray, newLyrics]);
+        setSelectedLyricsIndex(lyricsArray.length);
+        setSelectedLineIndex(null);
+        setShowJsonImportModal(false);
+        setSaveSuccess(true);
+      } catch (err) {
+        setError(String(err));
+      }
+    });
+  };
+
   if (lyricsArray.length === 0) {
     return (
       <div className="py-12 text-center">
@@ -504,6 +527,13 @@ export default function LyricsEditor({
           Importar Letras
         </button>
         <button
+          onClick={() => setShowJsonImportModal(true)}
+          type="button"
+          className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-white text-sm"
+        >
+          Importar JSON
+        </button>
+        <button
           onClick={handleSave}
           disabled={isSaving}
           type="button"
@@ -518,6 +548,13 @@ export default function LyricsEditor({
         onClose={() => setShowImportModal(false)}
         onImport={handleImportLyrics}
         isLoading={isImporting}
+      />
+
+      <LyricsJsonImportModal
+        isOpen={showJsonImportModal}
+        onClose={() => setShowJsonImportModal(false)}
+        onImport={handleJsonImportLyrics}
+        isLoading={isImportingJson}
       />
     </div>
   );
