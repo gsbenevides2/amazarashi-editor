@@ -1,11 +1,13 @@
 "use server";
 
+import { eq, asc } from "drizzle-orm";
+
+import { invalidateISG } from "@/app/_utils/invalidateISG";
 import { connectToDatabase } from "@/db";
 import { albunsTable, musics_albumsTable, musicsTable } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
-import { invalidateISG } from "../_utils/invalidateISG";
 
 export type AlbumInput = {
+  id?: string;
   nameRomaji: string;
   nameHiragana: string;
   nameEnglish: string;
@@ -55,8 +57,28 @@ export async function getAlbum(id: string) {
 
 export async function createAlbum(data: AlbumInput) {
   const db = connectToDatabase();
-  const id = crypto.randomUUID();
-  await db.insert(albunsTable).values({ id, ...data });
+
+  // Use o ID fornecido ou gere um novo UUID
+  const id = data.id || crypto.randomUUID();
+
+  // Verificar se o ID já existe (se foi fornecido)
+  if (data.id) {
+    const existing = await db
+      .select({ id: albunsTable.id })
+      .from(albunsTable)
+      .where(eq(albunsTable.id, data.id))
+      .get();
+
+    if (existing) {
+      throw new Error(
+        `Já existe um álbum com o ID "${data.id}". Escolha outro ID ou deixe em branco para gerar automaticamente.`,
+      );
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id: _, ...albumData } = data; // Remove o id do data para evitar duplicação
+  await db.insert(albunsTable).values({ id, ...albumData });
   invalidateISG();
   return id;
 }

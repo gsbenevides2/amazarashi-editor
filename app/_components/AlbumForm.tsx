@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { createAlbum, updateAlbum, setAlbumSongs } from "../_actions/albums";
-import { uploadImage } from "../_actions/upload";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useState, useRef, useTransition } from "react";
+
+import { createAlbum, updateAlbum, setAlbumSongs } from "@/app/_actions/albums";
+import { uploadImage } from "@/app/_actions/upload";
 
 type Song = { id: string; nameRomaji: string; nameHiragana: string };
 
@@ -33,6 +34,7 @@ export default function AlbumForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  const [customId, setCustomId] = useState("");
   const [nameRomaji, setNameRomaji] = useState(initialData?.nameRomaji ?? "");
   const [nameHiragana, setNameHiragana] = useState(
     initialData?.nameHiragana ?? "",
@@ -119,6 +121,7 @@ export default function AlbumForm({
     }
 
     const data = {
+      id: customId || undefined,
       nameRomaji,
       nameHiragana,
       nameEnglish,
@@ -158,6 +161,23 @@ export default function AlbumForm({
       )}
 
       <div className="gap-4 grid grid-cols-1 sm:grid-cols-2">
+        {!albumId && (
+          <div className="sm:col-span-2">
+            <Field label="ID Customizado (opcional)">
+              <input
+                type="text"
+                value={customId}
+                onChange={(e) => setCustomId(e.target.value)}
+                className="bg-neutral-700 px-3 py-2 border border-neutral-600 rounded w-full text-white"
+                placeholder="Deixe em branco para gerar automaticamente"
+              />
+              <p className="mt-1 text-gray-400 text-xs">
+                Se especificado, será usado como ID único do álbum. Caso
+                contrário, um ID será gerado automaticamente.
+              </p>
+            </Field>
+          </div>
+        )}
         <Field label="Nome Romaji">
           <input
             type="text"

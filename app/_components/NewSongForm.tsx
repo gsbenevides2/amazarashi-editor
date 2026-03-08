@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { createSong } from "../_actions/songs";
-import { uploadImage } from "../_actions/upload";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+
+import { createSong } from "@/app/_actions/songs";
+import { uploadImage } from "@/app/_actions/upload";
 
 export default function NewSongForm() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  const [customId, setCustomId] = useState("");
   const [nameRomaji, setNameRomaji] = useState("");
   const [nameHiragana, setNameHiragana] = useState("");
   const [nameEnglish, setNameEnglish] = useState("");
@@ -73,6 +75,7 @@ export default function NewSongForm() {
     startTransition(async () => {
       try {
         const newSongId = await createSong({
+          id: customId || undefined,
           nameRomaji,
           nameHiragana,
           nameEnglish,
@@ -103,6 +106,21 @@ export default function NewSongForm() {
       )}
 
       <div className="gap-4 grid grid-cols-1 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <Field label="ID Customizado (opcional)">
+            <input
+              type="text"
+              value={customId}
+              onChange={(e) => setCustomId(e.target.value)}
+              className={inputCls}
+              placeholder="Deixe em branco para gerar automaticamente"
+            />
+            <p className="mt-1 text-gray-400 text-xs">
+              Se especificado, será usado como ID único da música. Caso
+              contrário, um ID será gerado automaticamente.
+            </p>
+          </Field>
+        </div>
         <Field label="Nome Romaji">
           <input
             type="text"

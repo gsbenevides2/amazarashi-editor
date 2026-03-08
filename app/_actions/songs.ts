@@ -1,11 +1,13 @@
 "use server";
 
+import { eq, asc } from "drizzle-orm";
+
+import { invalidateISG } from "@/app/_utils/invalidateISG";
 import { connectToDatabase } from "@/db";
 import { musicsTable, musics_albumsTable, albunsTable } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
-import { invalidateISG } from "../_utils/invalidateISG";
 
 export type SongInput = {
+  id?: string;
   nameRomaji: string;
   nameHiragana: string;
   nameEnglish: string;
@@ -70,10 +72,30 @@ export async function getSong(id: string) {
 
 export async function createSong(data: SongInput) {
   const db = connectToDatabase();
-  const id = crypto.randomUUID();
+
+  // Use o ID fornecido ou gere um novo UUID
+  const id = data.id || crypto.randomUUID();
+
+  // Verificar se o ID já existe (se foi fornecido)
+  if (data.id) {
+    const existing = await db
+      .select({ id: musicsTable.id })
+      .from(musicsTable)
+      .where(eq(musicsTable.id, data.id))
+      .get();
+
+    if (existing) {
+      throw new Error(
+        `Já existe uma música com o ID "${data.id}". Escolha outro ID ou deixe em branco para gerar automaticamente.`,
+      );
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id: _, ...songData } = data; // Remove o id do data para evitar duplicação
   await db.insert(musicsTable).values({
     id,
-    ...data,
+    ...songData,
   });
   invalidateISG();
   return id;
